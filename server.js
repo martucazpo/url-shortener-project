@@ -2,6 +2,7 @@
 
 var express = require('express');
 var mongoose = require('mongoose');
+const dns = require('dns');
 //remove if make with out database
 const db = 'mongodb://localhost/urlParser';
 const shortUrl = require('./models/ShortUrl');
@@ -22,7 +23,9 @@ app.use(cors());
 // you should mount the body-parser here
 //this is the body parser that comes with express
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({
+  extended: false
+}));
 
 app.use('/public', express.static(process.cwd() + '/public'));
 
@@ -45,15 +48,45 @@ app.get("/shorturl", (req, res) => {
   });
 });
 
-app.post("/api/shorturl/new", async (req,res) => {
-  await shortUrl.create({ full: req.body.url, short: req.body.shortUrl });
-  res.redirect('/shorturl');
+app.post("/api/shorturl/new", (req, res) => {
+  let {
+    url
+  } = req.body;
+  const parsedUrl = url.replace(/^https?:\/\//, '');
+
+  dns.lookup(parsedUrl, (err) => {
+
+    if (err) {
+      return res.json({
+        error: "Invalid URL"
+      });
+    } else {
+
+      shortUrl.create({
+        full: req.body.url,
+        short: req.body.shortUrl
+      })
+      .then(
+      res.redirect('/shorturl')
+      );
+    }
+  });
+
 });
 
 app.get('/:shortUrl', async (req, res) => {
-  const sUrl = await shortUrl.findOne({ short: req.params.shortUrl });
-   res.redirect(sUrl.full);
- });
+  const sUrl = await shortUrl.findOne({
+    short: req.params.shortUrl
+  });
+  if (sUrl.full) {
+    dns.lookup(sUrl.full, (err) => {
+      console.log(err);
+    })
+    res.redirect(sUrl.full);
+  } else {
+    res.json("Please enter a valid URL")
+  }
+});
 
 // this will need to be taken out if no database
 mongoose.connect(db, {
